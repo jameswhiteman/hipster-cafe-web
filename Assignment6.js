@@ -8,10 +8,11 @@ var tables = [];
 var bathrooms = [];
 var decors = [];
 var wifi = 0;
-var smell = 0;
+var scent = 0;
 // Global variables
 var interfaceElements = 0;
 var nextCharacter = 100;
+var textStats;
 
 // Game logic
 var selected = "";
@@ -49,7 +50,11 @@ function init() {
   camera = new THREE.PerspectiveCamera(45, canvasRatio, 1, 30000 );
   camera.position.set(-7000, 7000, 3000);
   camera.lookAt(new THREE.Vector3(0, 0, 0));
-  var context
+  var context;
+
+  // Add text
+  textStats = createStatsText();
+  scene.add(textStats);
 
   // Canvas Updates
   animate();
@@ -73,32 +78,113 @@ function animate() {
 }
 
 function gameLogic() {
-  if (nextCharacter > 0)
-  nextCharacter--;
-  if (nextCharacter === 0)
+    /*
+    if (nextCharacter > 0)
+    nextCharacter--;
+    if (nextCharacter === 0)
     {
-      nextCharacter = 400;
+      //nextCharacter = 400;
       //nextCharacter = -1;
       var newCharacter = createCharacter();
       newCharacter.position.z = 7000;
       scene.add(newCharacter);
     }
-  for (var i = 0; i < characters.length; i++) {
-    // Character logic
-    var currentCharacter = characters[i];
-    if (currentCharacter.traits.poop >= 100)
-    {
-        console.log("pooped");
-        currentCharacter.traits.poop = 0;
+    */
+    for (var i = 0; i < characters.length; i++) {
+        // Character logic
+        var currentCharacter = characters[i];
+        if (currentCharacter == null)
+            continue;
         /*
-        var newPoop = createPoop();
-        newPoop.position.x = currentCharacter.character.position.x;
-        newPoop.position.y = currentCharacter.character.position.y;
-        newPoop.position.z = currentCharacter.character.position.z;
-        scene.add(newPoop);*/
+        if (currentCharacter.traits.poop >= 100)
+        {
+            console.log("pooped");
+            currentCharacter.traits.poop = 0;
+            var newPoop = createPoop();
+            newPoop.position.x = currentCharacter.character.position.x;
+            newPoop.position.y = currentCharacter.character.position.y;
+            newPoop.position.z = currentCharacter.character.position.z;
+            scene.add(newPoop);
+        }
+        else
+        {
+            // Walk out if scent is unsatisfying, decor is ugly, wifi is slow, tables are full
+            if (smell < currentCharacter.traits.pompousness)
+            {
+                currentCharacter.state = "leave";
+            }
+        }
+        */
+        // Character States
+        if (currentCharacter.traits.state === "enter")
+        {
+            if (currentCharacter.character.position.z > 5200)
+            {
+                currentCharacter.character.position.z -= 10;
+            }
+            else
+            {
+                currentCharacter.traits.state = "evaluate";
+            }
+        }
+        else if (currentCharacter.traits.state === "evaluate")
+        {
+            if (scent < currentCharacter.traits.pompousness)
+            {
+                currentCharacter.traits.state = "leave";
+            }
+            else if (wifi < currentCharacter.traits.techsavv)
+            {
+                currentCharacter.traits.state = "leave";
+            }
+            else if (decors.length < currentCharacter.traits.tackiness)
+            {
+                currentCharacter.traits.state = "leave";
+            }
+
+        }
+        else if (currentCharacter.traits.state === "leave")
+        {
+            if (currentCharacter.character.position.z < 7000)
+            {
+                currentCharacter.character.position.z += 10;
+            }
+            else
+            {
+                characters[i] = null;
+            }
+        }
+
+        // Constant character logic
+        if (currentCharacter.traits.poop > 50 && currentCharacter.traits.state != "enter")
+        {
+            if (currentCharacter.traits.poop >= 100)
+            {
+                alert("pooped");
+                currentCharacter.traits.poop = 0;
+                var newPoop = createPoop();
+                //newPoop.position.x = currentCharacter.character.position.x;
+                newPoop.position.x = -2000;
+                newPoop.position.y = 800;
+                newPoop.position.z = 3000;
+                //newPoop.position.y = currentCharacter.character.position.y;
+                //newPoop.position.z = currentCharacter.character.position.z;
+                scene.add(newPoop);
+                currentCharacter.traits.state = "leave";
+            }
+        }
     }
-    currentCharacter.character.position.z -= 10;
-  }
+}
+
+function createStatsText()
+{
+    var textSmellGeo = new THREE.TextGeometry("Scent:" + scent + " Wifi:" + wifi + " Decor:" + decors.length);
+    var textSmell = new THREE.Mesh(textSmellGeo, new THREE.MeshBasicMaterial( { color: 0xffffff, opacity: 0.5, transparent: true } ));
+    textSmell.position.x = -3000;
+    textSmell.position.y = 5200;
+    textSmell.position.z = 2100;
+    textSmell.lookAt(new THREE.Vector3(-7000, 7000, 3000));
+    return textSmell;
 }
 
 function interfaceMove(e) {
@@ -132,11 +218,23 @@ function interfaceClick(e) {
   intersects = raycaster.intersectObjects(scene.children, true);
   if (intersects.length > 0) {
     var newObject, newObjectOffset;
-    console.log(intersects[0].object.name);
     if (intersects[0].object.name.indexOf("interface") > -1)
     {
         selected = intersects[0].object.name;
-        console.log("interface selected");
+        if (selected === "interface-addWifi")
+        {
+            wifi += 5;
+            scene.remove(textStats);
+            textStats = createStatsText();
+            scene.add(textStats);
+        }
+        if (selected === "interface-addScent")
+        {
+            scent += 5;
+            scene.remove(textStats);
+            textStats = createStatsText();
+            scene.add(textStats);
+        }
         return;
     }
     else if (intersects[0].object.name === "poop")
@@ -174,20 +272,17 @@ function interfaceClick(e) {
     {
         newObjectOffset = 350;
         newObject = createDecor();
-    }
-    else if (selected === "interface-addWifi")
-    {
-      wifi += 5;
-      return;
-    }
-    else if (selected === "interface-addScent")
-    {
-      scent += 10;
-      return;
+        decors.push(newObject);
+        scene.remove(textStats);
+        textStats = createStatsText();
+        scene.add(textStats);
     }
     else
     {
-        console.log("Nothing clicked");
+        console.log("creating customer");
+        var newCharacter = createCharacter();
+        newCharacter.position.z = 7000;
+        scene.add(newCharacter);
         return;
     }
     newObject.position.x = intersects[0].point.x;
@@ -308,12 +403,13 @@ function createCharacter() {
 
   // traits
   var traits = {
+    state:"enter",
     thirst:100,
     poop:100,
     pain:100,
-    tackiness:100,
-    techsavv:100,
-    pompousness:100
+    tackiness:1,
+    techsavv:10,
+    pompousness:10
   };
 
   this.rotateCharacterX = 0;
