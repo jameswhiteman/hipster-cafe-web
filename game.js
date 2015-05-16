@@ -1,7 +1,8 @@
 var camera, scene, renderer;
 var intersects = [];
 // Game logic
-var money = 1000;
+var won = false;
+var cash = 1000;
 var characters = [];
 var counters = [];
 var tables = [];
@@ -37,8 +38,12 @@ function init() {
   var interfaceAddWifi = createInterface("addWifi");
   var interfaceAddScent = createInterface("addScent");
   var ground = createGround();
+  var leftWall = createLeftWall();
+  var rightWall = createRightWall();
   initScene(scene);
   scene.add(ground);
+  scene.add(leftWall);
+  scene.add(rightWall);
 
   // Add interface
   scene.add(interfaceAddCounter);
@@ -53,8 +58,7 @@ function init() {
   var context;
 
   // Add text
-  textStats = createStatsText();
-  scene.add(textStats);
+  updateStatsText();
 
   // Canvas Updates
   animate();
@@ -78,18 +82,28 @@ function animate() {
 }
 
 function gameLogic() {
-    /*
+
+    // Win/Lose conditions
+    if (cash <= 0)
+    {
+        alert("You lose!");
+    }
+    else if (cash >= 10000 && won === false)
+    {
+        won = true;
+        alert("You win!");
+    }
+
+    // Create customers
     if (nextCharacter > 0)
     nextCharacter--;
     if (nextCharacter === 0)
     {
-      //nextCharacter = 400;
-      //nextCharacter = -1;
+      nextCharacter = 300;
       var newCharacter = createCharacter();
       newCharacter.position.z = 7000;
       scene.add(newCharacter);
     }
-    */
     for (var i = 0; i < characters.length; i++) {
         // Character logic
         var currentCharacter = characters[i];
@@ -118,27 +132,36 @@ function gameLogic() {
         // Character States
         if (currentCharacter.traits.state === "enter")
         {
-            if (currentCharacter.character.position.z > 5200)
+            if (currentCharacter.character.position.z > 4800)
             {
                 currentCharacter.character.position.z -= 10;
             }
             else
             {
                 currentCharacter.traits.state = "evaluate";
+                return;
             }
         }
         else if (currentCharacter.traits.state === "evaluate")
         {
             if (scent < currentCharacter.traits.pompousness)
             {
+                console.log("bad scent leave");
                 currentCharacter.traits.state = "leave";
             }
             else if (wifi < currentCharacter.traits.techsavv)
             {
+                console.log("bad wifi leave");
                 currentCharacter.traits.state = "leave";
             }
             else if (decors.length < currentCharacter.traits.tackiness)
             {
+                console.log("bad decor leave");
+                currentCharacter.traits.state = "leave";
+            }
+            else if (currentCharacter.traits.poop <= 50 && currentCharacter.traits.pain <= 50 && currentCharacter.traits.thirst <= 10)
+            {
+                console.log("bored leave");
                 currentCharacter.traits.state = "leave";
             }
 
@@ -147,11 +170,20 @@ function gameLogic() {
         {
             if (currentCharacter.character.position.z < 7000)
             {
-                currentCharacter.character.position.z += 10;
+                currentCharacter.character.position.z += currentCharacter.traits.speed;
             }
             else
             {
-                characters[i] = null;
+                scene.remove(currentCharacter.character);
+                var me = -1;
+                for (var n = 0; n < characters.length; n++) {
+                    if (characters[n] === currentCharacter) {
+                        me = n;
+                    }
+                }
+                if (me != -1) {
+                    delete characters[me];
+                }
             }
         }
 
@@ -172,19 +204,216 @@ function gameLogic() {
                 scene.add(newPoop);
                 currentCharacter.traits.state = "leave";
             }
+            else
+            {
+                currentCharacter.traits.state = "toilet";
+                for (var num = 0; num < scene.children.length; num++) {
+                    var child = scene.children[num];
+                    if (child.name === "vacant")
+                    {
+                        // free up counters and tables
+                        for (var j = 0; j < scene.children.length; j++) {
+                            if (currentCharacter.traits.target === scene.children[num] && scene.children[num].name === "seated")
+                                scene.children[j].name = "unseated";
+                            else if (currentCharacter.traits.target === scene.children[num] && scene.children[num].name === "serving")
+                                scene.children[j].name = "unserved";
+                        }
+                        scene.children[num].name = "occupied";
+                        child.name = "occupied";
+                        currentCharacter.traits.target = child;
+                        break;
+                    }
+                }
+                if (!currentCharacter.traits.target || currentCharacter.traits.target.name != "occupied")
+                {
+                    console.log("no bathroom leave");
+                    currentCharacter.traits.state = "leave";
+                }
+            }
+        }
+        else if (currentCharacter.traits.pain > 50 && currentCharacter.traits.state != "enter" && currentCharacter.traits.state != "toilet" &&
+                 (!currentCharacter.traits.target || currentCharacter.traits.target.name != "seated"))
+        {
+            for (var num = 0; num < scene.children.length; num++) {
+                var child = scene.children[num];
+                if (child.name === "unseated")
+                {
+                    // free up counters and bathrooms
+                    for (var j = 0; j < scene.children.length; j++) {
+                        if (currentCharacter.traits.target === scene.children[num] && scene.children[num].name === "occupied")
+                            scene.children[j].name = "vacant";
+                        else if (currentCharacter.traits.target === scene.children[num] && scene.children[num].name === "serving")
+                            scene.children[j].name = "unserved";
+                    }
+                    scene.children[num].name = "seated";
+                    child.name = "seated";
+                    currentCharacter.traits.target = child;
+                    currentCharacter.traits.state = "sit";
+                    break;
+                }
+            }
+            if (!currentCharacter.traits.target || currentCharacter.traits.target.name != "seated")
+            {
+                console.log("no table leave");
+                currentCharacter.traits.state = "leave";
+            }
+        }
+        /*
+        else if (currentCharacter.traits.thirst > 50 && currentCharacter.traits.state != "enter" && currentCharacter.traits.state != "drink" &&
+                 currentCharacter.traits.state != "toilet" && currentCharacter.traits.state != "sit" && currentCharacter.traits.state != "leave" &&
+                (!currentCharacter.traits.target || currentCharacter.traits.target.name != "serving"))
+                */
+        else if (currentCharacter.traits.thirst > 0 && currentCharacter.traits.state === "evaluate" &&
+                (!currentCharacter.traits.target || currentCharacter.traits.target.name != "serving"))
+        {
+            for (var num = 0; num < scene.children.length; num++) {
+                var child = scene.children[num];
+                if (child.name === "unserved")
+                {
+                    // free up tables and bathrooms
+                    for (var j = 0; j < scene.children.length; j++) {
+                        if (currentCharacter.traits.target === scene.children[num] && scene.children[num].name === "occupied")
+                            scene.children[j].name = "vacant";
+                        else if (currentCharacter.traits.target === scene.children[num] && scene.children[num].name === "seated")
+                            scene.children[j].name = "unseated";
+                    }
+                    scene.children[num].name = "serving";
+                    child.name = "serving";
+                    currentCharacter.traits.target = child;
+                    currentCharacter.traits.state = "drink";
+                    break;
+                }
+            }
+            if (!currentCharacter.traits.target || currentCharacter.traits.target.name != "serving")
+            {
+                console.log("no counter leave");
+                currentCharacter.traits.state = "leave";
+            }
+        }
+
+        // Move to target
+        if (currentCharacter.traits.state != "enter" && currentCharacter.traits.state != "leave" && currentCharacter.traits.target != null)
+        {
+            currentCharacter.traits.poop += 0.05;
+            currentCharacter.traits.pain += 0.01;
+            currentCharacter.traits.thirst += 0.1;
+            var useDistance = 20;
+            var speed = currentCharacter.traits.speed;
+            var zDiff = currentCharacter.character.position.z - currentCharacter.traits.target.position.z;
+            var xDiff = currentCharacter.character.position.x - currentCharacter.traits.target.position.x;
+            currentCharacter.character.lookAt(new THREE.Vector3(currentCharacter.traits.target.position.x, currentCharacter.character.position.y,
+                                                            currentCharacter.traits.target.position.z));
+            // Z-Axis
+            if (zDiff >= speed)
+            {
+                currentCharacter.character.position.z -= speed;
+            }
+            else if (zDiff > 0)
+            {
+                currentCharacter.character.position.z -= zDiff;
+            }
+            else if (zDiff <= speed)
+            {
+                currentCharacter.character.position.z += speed;
+            }
+            else if (zDiff < 0)
+            {
+                currentCharacter.character.position.z += zDiff;
+            }
+
+            // X-Axis
+            if (xDiff >= speed)
+            {
+                currentCharacter.character.position.x -= speed;
+            }
+            else if (xDiff > 0)
+            {
+                currentCharacter.character.position.x -= xDiff;
+            }
+            else if (xDiff <= speed)
+            {
+                currentCharacter.character.position.x += speed;
+            }
+            else if (xDiff < 0)
+            {
+                currentCharacter.character.position.x += xDiff;
+            }
+
+            // Fulfill states on arrival
+            if (Math.abs(currentCharacter.character.position.x - currentCharacter.traits.target.position.x) <= useDistance &&
+               Math.abs(currentCharacter.character.position.z - currentCharacter.traits.target.position.z) <= useDistance)
+            {
+                if (currentCharacter.traits.state === "toilet")
+                {
+                    for (var num = 0; num < scene.children.length; num++) {
+                        if (scene.children[num] === currentCharacter.traits.target)
+                        {
+                            scene.children[num].name = "vacant";
+                            currentCharacter.traits.poop = 0;
+                            currentCharacter.traits.state = "evaluate";
+                            return;
+                        }
+                    }
+                }
+                else if (currentCharacter.traits.state === "sit")
+                {
+                    if (currentCharacter.traits.pain <= 0)
+                    {
+                        currentCharacter.traits.state = "evaluate";
+                        for (var num = 0; num < scene.children.length; num++) {
+                            if (scene.children[num] === currentCharacter.traits.target)
+                            {
+                                scene.children[num].name = "unseated";
+                                currentCharacter.traits.state = "evaluate";
+                                return;
+                            }
+                        return;
+                        }
+                    }
+                    else
+                    {
+                        currentCharacter.traits.pain -= 0.2;
+                    }
+                }
+                else if (currentCharacter.traits.state === "drink")
+                {
+                    cash += Math.round(currentCharacter.traits.thirst / 10);
+                    updateStatsText();
+                    currentCharacter.traits.thirst = 0;
+                    for (var num = 0; num < scene.children.length; num++) {
+                        if (scene.children[num] === currentCharacter.traits.target)
+                        {
+                            scene.children[num].name = "unserved";
+                            currentCharacter.traits.state = "evaluate";
+                            return;
+                        }
+                    }
+                }
+            }
+            /*
+            console.log("pain:" + currentCharacter.traits.pain + ", poop:" + currentCharacter.traits.poop + ", thirst:" + currentCharacter.traits.thirst);
+            */
         }
     }
 }
 
-function createStatsText()
+function updateStatsText()
 {
     var textSmellGeo = new THREE.TextGeometry("Scent:" + scent + " Wifi:" + wifi + " Decor:" + decors.length);
+    var textCashGeo = new THREE.TextGeometry("Cash: $" + cash);
     var textSmell = new THREE.Mesh(textSmellGeo, new THREE.MeshBasicMaterial( { color: 0xffffff, opacity: 0.5, transparent: true } ));
-    textSmell.position.x = -3000;
-    textSmell.position.y = 5200;
-    textSmell.position.z = 2100;
-    textSmell.lookAt(new THREE.Vector3(-7000, 7000, 3000));
-    return textSmell;
+    var textCash = new THREE.Mesh(textCashGeo, new THREE.MeshBasicMaterial( { color: 0xffffff, opacity: 0.5, transparent: true } ));
+    textCash.position.y = 300;
+    var text = new THREE.Object3D();
+    text.position.x = -3000;
+    text.position.y = 5000;
+    text.position.z = 2100;
+    text.lookAt(new THREE.Vector3(-7000, 7000, 3000));
+    text.add(textSmell);
+    text.add(textCash);
+    scene.remove(textStats);
+    textStats = text;
+    scene.add(textStats);
 }
 
 function interfaceMove(e) {
@@ -197,11 +426,15 @@ function interfaceMove(e) {
   raycaster.far = 100000;
   raycaster.setFromCamera(vector, camera);
   var newIntersects = raycaster.intersectObjects(scene.children, true);
-  if (intersects.length > 0 && intersects[0].object.name != "ground") {
+  if (intersects.length > 0 && intersects[0].object.name != "ground" &&
+     intersects[0].object.name != "wall" &&
+     intersects[0].object.name != "character") {
       intersects[ 0 ].object.material.color.set( 0xbbbbbb );
   }
   intersects = newIntersects;
-  if (intersects.length > 0 && intersects[0].object.name != "ground") {
+  if (intersects.length > 0 && intersects[0].object.name != "ground" &&
+     intersects[0].object.name != "wall" &&
+     intersects[0].object.name != "character") {
     intersects[ 0 ].object.material.color.set( 0x0000ff );
   }
 }
@@ -223,17 +456,29 @@ function interfaceClick(e) {
         selected = intersects[0].object.name;
         if (selected === "interface-addWifi")
         {
+            if (cash >= 20)
+            {
+                cash -= 20;
+            }
+            else
+            {
+                return;
+            }
             wifi += 5;
-            scene.remove(textStats);
-            textStats = createStatsText();
-            scene.add(textStats);
+            updateStatsText();
         }
         if (selected === "interface-addScent")
         {
+            if (cash >= 15)
+            {
+                cash -= 15;
+            }
+            else
+            {
+                return;
+            }
             scent += 5;
-            scene.remove(textStats);
-            textStats = createStatsText();
-            scene.add(textStats);
+            updateStatsText();
         }
         return;
     }
@@ -241,7 +486,6 @@ function interfaceClick(e) {
     {
         console.log("removed poop");
         scene.remove(intersects[0].object.parent);
-        money -= 10;
         return;
     }
     else if (intersects[0].object.name === "character")
@@ -255,34 +499,69 @@ function interfaceClick(e) {
 	}
     else if (selected === "interface-addCounter")
     {
+        if (cash >= 100)
+        {
+            cash -= 100;
+        }
+        else
+        {
+            return;
+        }
         newObjectOffset = 300;
         newObject = createCounter();
+        updateStatsText();
     }
     else if (selected === "interface-addTable")
     {
+        if (cash >= 60)
+        {
+            cash -= 60;
+        }
+        else
+        {
+            return;
+        }
         newObjectOffset = 300;
         newObject = createTable();
+        updateStatsText();
     }
     else if (selected === "interface-addBathroom")
     {
+        if (cash >= 80)
+        {
+            cash -= 80;
+        }
+        else
+        {
+            return;
+        }
         newObjectOffset = 150;
         newObject = createBathroom();
+        updateStatsText();
     }
     else if (selected === "interface-addDecor")
     {
+        if (cash >= 30)
+        {
+            cash -= 30;
+        }
+        else
+        {
+            return;
+        }
         newObjectOffset = 350;
         newObject = createDecor();
         decors.push(newObject);
-        scene.remove(textStats);
-        textStats = createStatsText();
-        scene.add(textStats);
+        updateStatsText();
     }
     else
     {
+        /*
         console.log("creating customer");
         var newCharacter = createCharacter();
         newCharacter.position.z = 7000;
         scene.add(newCharacter);
+        */
         return;
     }
     newObject.position.x = intersects[0].point.x;
@@ -299,7 +578,7 @@ function createCounter() {
   var counterDepth = 200;
   var counterMaterial = new THREE.MeshPhongMaterial( { color: 0x6E23BB, specular: 0x6E23BB, shininess: 20 } );
   var counter = new THREE.Mesh(new THREE.BoxGeometry(counterWidth, counterHeight, counterDepth), counterMaterial);
-  counter.name = "counter";
+  counter.name = "unserved";
   return counter;
 }
 
@@ -309,7 +588,7 @@ function createTable() {
   var depth = 600;
   var material = new THREE.MeshPhongMaterial( { color: 0x6E23BB, specular: 0x6E23BB, shininess: 20 } );
   var table = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), material);
-  table.name = "table";
+  table.name = "unseated";
   return table;
 }
 
@@ -319,7 +598,7 @@ function createBathroom() {
   var depth = 600;
   var material = new THREE.MeshPhongMaterial( { color: 0x6E23BB, specular: 0x6E23BB, shininess: 20 } );
   var bathroom = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), material);
-  bathroom.name = "bathroom";
+  bathroom.name = "vacant";
   return bathroom;
 }
 
@@ -379,6 +658,7 @@ function createInterface(interface) {
   {
       url = "textures/interface-add-scent.png";
   }
+    THREE.ImageUtils.crossOrigin = '';
   var map = THREE.ImageUtils.loadTexture(url);
   var material = new THREE.SpriteMaterial({map:map,useScreenCoordinates:true,color:0xffffff,fog:true});
   var sprite = new THREE.Sprite(material);
@@ -401,15 +681,34 @@ function createCharacter() {
   var chest, leftBicep, rightBicep, leftForearm, rightForearm, leftHand, rightHand;
   var neck, head;
 
+  var traitSpeed = Math.round(Math.random() * 5 + 10);
+  var traitThirst = Math.round(Math.random() * 50 + 10);
+  var traitPoop = Math.round(Math.random() * 50 + 10);
+  var traitPain = Math.round(Math.random() * 50 + 10);
+  var traitTackiness = Math.round(Math.random() * 5);
+  var traitTechsavv = Math.round(Math.random() * 30);
+  var traitPompousness = Math.round(Math.random() * 30);
+ /*
+ var traitSpeed = 20;
+ var traitThirst = 100;
+ var traitPoop = 60;
+ var traitPain = 60;
+ var traitTackiness = 0;
+ var traitTechsavv = 0;
+ var traitPompousness = 0;
+ */
+
   // traits
   var traits = {
     state:"enter",
-    thirst:100,
-    poop:100,
-    pain:100,
-    tackiness:1,
-    techsavv:10,
-    pompousness:10
+    target:null,
+    speed:traitSpeed,
+    thirst:traitThirst,
+    poop:traitPoop,
+    pain:traitPain,
+    tackiness:traitTackiness,
+    techsavv:traitTechsavv,
+    pompousness:traitPompousness
   };
 
   this.rotateCharacterX = 0;
@@ -617,6 +916,25 @@ function createCharacter() {
   stomach.add(chest);
   character.add(stomach);
 
+  // Add text to character showing stats
+    var textTechSavvGeo = new THREE.TextGeometry("Tech-Savv: " + traitTechsavv);
+    var textPompousnessGeo = new THREE.TextGeometry("Pompousness: " + traitPompousness);
+    var textTackinessGeo = new THREE.TextGeometry("Tackiness: " + traitTackiness);
+    var textTechSavv = new THREE.Mesh(textTechSavvGeo, new THREE.MeshBasicMaterial( { color: 0x0000ff, opacity: 0.5, transparent: true } ));
+    var textPompousness = new THREE.Mesh(textPompousnessGeo, new THREE.MeshBasicMaterial( { color: 0x0000ff, opacity: 0.5, transparent: true } ));
+    var textTackiness = new THREE.Mesh(textTackinessGeo, new THREE.MeshBasicMaterial( { color: 0x0000ff, opacity: 0.5, transparent: true } ));
+    textTechSavv.position.y = 600;
+    textPompousness.position.y = 750;
+    textTackiness.position.y = 900;
+    var text = new THREE.Object3D();
+    text.lookAt(new THREE.Vector3(-7000, 7000, 3000));
+    text.add(textTechSavv);
+    text.add(textPompousness);
+    text.add(textTackiness);
+    character.add(text);
+
+    // Finalize character
+
   character.position.x = 0;
   character.position.y = 0;
   character.position.z = 0;
@@ -626,6 +944,7 @@ function createCharacter() {
 }
 
 function createGround() {
+    THREE.ImageUtils.crossOrigin = '';
   var groundTexture = THREE.ImageUtils.loadTexture("textures/ground.jpg");
   groundTexture.wrapS = THREE.RepeatWrapping;
   groundTexture.wrapT = THREE.RepeatWrapping;
@@ -641,6 +960,43 @@ function createGround() {
   ground.rotation.x = -Math.PI/2;
   ground.name = "ground";
   return ground;
+}
+
+function createLeftWall() {
+    THREE.ImageUtils.crossOrigin = '';
+  var groundTexture = THREE.ImageUtils.loadTexture("textures/wall.jpg");
+  groundTexture.wrapS = THREE.RepeatWrapping;
+  groundTexture.wrapT = THREE.RepeatWrapping;
+  groundTexture.repeat.set(256, 256);
+  var groundMaterial = new THREE.MeshBasicMaterial({
+    map: groundTexture
+  });
+
+  var wall = new THREE.Mesh(new THREE.PlaneGeometry(10000, 10000), groundMaterial);
+  wall.position.x = 2000;
+  wall.position.y = 0;
+  wall.position.z = -10000;
+  wall.name = "wall";
+  return wall;
+}
+
+function createRightWall() {
+    THREE.ImageUtils.crossOrigin = '';
+  var groundTexture = THREE.ImageUtils.loadTexture("textures/wall.jpg");
+  groundTexture.wrapS = THREE.RepeatWrapping;
+  groundTexture.wrapT = THREE.RepeatWrapping;
+  groundTexture.repeat.set(256, 256);
+  var groundMaterial = new THREE.MeshBasicMaterial({
+    map: groundTexture
+  });
+
+  var wall = new THREE.Mesh(new THREE.PlaneGeometry(20000, 10000), groundMaterial);
+  wall.position.x = 5000;
+  wall.position.y = 0;
+  wall.position.z = -1000;
+  wall.rotation.y = -Math.PI/2.5;
+  wall.name = "wall";
+  return wall;
 }
 
 function initScene(scene) {
